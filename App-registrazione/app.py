@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 app = Flask(__name__)
 
 # Configurazione IA
-aai.settings.api_key = "LA_TUA_API_KEY_ASSEMBLYAI"
+aai.settings.api_key = "2ca31980bc7f4df89e07a7246385f8ba"
 
 # Configurazione Google Docs
 GOOGLE_DOC_ID = "IL_TUO_ID_DEL_GOOGLE_DOC_QUI"
