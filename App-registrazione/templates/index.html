@@ -16,17 +16,24 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #ffffff;
             height: 100vh;
+            display: flex;justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Contenitore principale bloccato al centro dello schermo */
+        .container {
+            text-align: center;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
         }
 
-        .container {
-            text-align: center;
-        }
-
-        /* Il grande bottone tondo */
+        /* bottone */
         .record-btn {
             width: 140px;
             height: 140px;
