@@ -10,7 +10,7 @@ app = Flask(__name__)
 aai.settings.api_key = "2ca31980bc7f4df89e07a7246385f8ba"
 
 # Configurazione Google Docs
-GOOGLE_DOC_ID = "1et0ruaxxGFCW07ZDACTRnlZWHdvCwWgknFZQ7neQ0jA"
+GOOGLE_DOC_ID = "1ncr0N2W-TMbp-r_DefthoVhd_FIAQlVNJXxBa_y-ZU0"
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/documents']
 
