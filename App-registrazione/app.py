@@ -38,26 +38,35 @@ def scrivi_su_google_doc(testo_da_aggiungere):
 def index():
     return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
+# Allineato l'indirizzo con index.html cambiando da /upload a /upload_audio
+@app.route('/upload_audio', methods=['POST'])
 def upload_audio():
     if 'audio' not in request.files:
-        return jsonify({"error": "Nessun file"}), 400
+        return jsonify({"success": False, "error": "Nessun file"}), 400
     
     audio_file = request.files['audio']
+    chosen_lang = request.form.get('lang', 'auto') # Riceve la lingua scelta dallo schermo
     
-    # 1. SALVATAGGIO AUDIO (Qui puoi reindirizzarlo verso la cartella del tuo gestionale/banca dati)
+    # 1. SALVATAGGIO AUDIO
     audio_path = "banca_dati_audio/registrazione_odierna.wav" 
     os.makedirs("banca_dati_audio", exist_ok=True)
     audio_file.save(audio_path)
 
-    # 2. ELABORAZIONE TRASCRIZIONE E TONO
-    config = aai.TranscriptionConfig(speaker_labels=True, sentiment_analysis=True)
+    # 2. ELABORAZIONE TRASCRIZIONE, LINGUA E TONO
+    if chosen_lang == 'auto':
+        # Se selezioni automatico, l'IA rileva da sola se parli italiano o inglese
+        config = aai.TranscriptionConfig(speaker_labels=True, sentiment_analysis=True, language_detection=True)
+    else:
+        # Altrimenti usa la lingua fissa che hai impostato sul telefono
+        config = aai.TranscriptionConfig(speaker_labels=True, sentiment_analysis=True, language_code=chosen_lang)
+        
     transcriber = aai.Transcriber()
     
     try:
         transcript = transcriber.transcribe(audio_path, config=config)
         
-        testo_completo_doc = "\n--- NUOVO DIALOGO REGISTRATO ---\n"
+        info_lingua = f"Rilevata dall'IA" if chosen_lang == 'auto' else chosen_lang.upper()
+        testo_completo_doc = f"\n--- NUOVO DIALOGO REGISTRATO (Lingua: {info_lingua}) ---\n"
         
         for utterance in transcript.utterances:
             sentiments = [word.sentiment for word in utterance.words if word.sentiment]
@@ -67,17 +76,17 @@ def upload_audio():
             # Sostituiamo i nomi dei parlanti con i numeri
             parlante_num = utterance.speaker.replace("A", "1").replace("B", "2").replace("C", "3")
             
-            # Formattiamo la riga come vuoi che appaia sul foglio di scrittura
+            # Formattiamo la riga per il foglio di scrittura
             riga = f"Persona {parlante_num} ({tono_it}): {utterance.text}\n"
             testo_completo_doc += riga
 
         # 3. SCRITTURA DIRETTA SUL FOGLIO MODIFICABILE
         scrivi_su_google_doc(testo_completo_doc)
         
-        return jsonify({"status": "Successo! Trascrizione inviata al foglio modificabile e audio salvato."})
+        return jsonify({"success": True, "status": "Trascrizione inviata al foglio e audio salvato."})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
