@@ -16,7 +16,8 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #ffffff;
             height: 100vh;
-            display: flex;justify-content: center;
+            display: flex;
+            justify-content: center;
             align-items: center;
             overflow: hidden;
         }
@@ -33,7 +34,24 @@
             padding: 20px;
         }
 
-        /* bottone */
+        /* Menu selezione lingua */
+        .language-selector { 
+            margin-bottom: 25px; 
+            font-size: 14px; 
+            color: #555; 
+        }
+        .language-selector select {
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 2px solid #00a2ff;
+            background-color: white;
+            color: #00a2ff;
+            font-weight: bold;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Il grande bottone tondo */
         .record-btn {
             width: 140px;
             height: 140px;
@@ -51,12 +69,12 @@
             box-shadow: 0 6px 20px rgba(0, 162, 255, 0.15);
         }
 
-        /* Effetto quando ci passi sopra o lo clicchi */
+        /* Effetto al click */
         .record-btn:active {
             transform: scale(0.95);
         }
 
-        /* Stato durante la registrazione: diventa azzurro con icona bianca */
+        /* Stato durante la registrazione */
         .record-btn.recording {
             background-color: #00a2ff;
             color: #ffffff;
@@ -72,6 +90,24 @@
             font-weight: 500;
         }
 
+        /* Box per l'anteprima del testo che scorre sotto */
+        .preview-box {
+            margin-top: 25px;
+            width: 100%;
+            max-height: 150px;
+            min-height: 80px;
+            overflow-y: auto;
+            padding: 15px;
+            border-radius: 12px;
+            background-color: #f4f9ff;
+            border: 1px dashed #00a2ff;
+            color: #333333;
+            font-size: 15px;
+            line-height: 1.4;
+            text-align: left;
+            display: none; /* Appare solo quando si registra */
+        }
+
         /* Animazione di pulsazione soft mentre registra */
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(0, 162, 255, 0.4); }
@@ -83,18 +119,55 @@
 <body>
 
     <div class="container">
+        <div class="language-selector">
+            <label for="langSelect">Lingua: </label>
+            <select id="langSelect">
+                <option value="auto">Rileva Automaticamente ✨</option>
+                <option value="it">Italiano 🇮🇹</option>
+                <option value="en">Inglese 🇬🇧</option>
+            </select>
+        </div>
+
         <button id="recordBtn" class="record-btn">
             <i class="fa-solid fa-microphone"></i>
         </button>
         <p id="status">Tocca per registrare</p>
+
+        <div id="previewBox" class="preview-box"></div>
     </div>
 
     <script>
         const recordBtn = document.getElementById('recordBtn');
         const statusText = document.getElementById('status');
+        const previewBox = document.getElementById('previewBox');
+        const langSelect = document.getElementById('langSelect');
+        
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
+        let recognition;
+
+        // Funzione per attivare il testo sullo schermo in tempo reale
+        function startSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                
+                // Configura la lingua per l'anteprima dello schermo
+                recognition.lang = langSelect.value === 'en' ? 'en-US' : 'it-IT';
+
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                    previewBox.innerText = interimTranscript;
+                    previewBox.scrollTop = previewBox.scrollHeight;
+                };
+            }
+        }
 
         recordBtn.addEventListener('click', async () => {
             if (!isRecording) {
@@ -111,10 +184,12 @@
                     mediaRecorder.onstop = async () => {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                         statusText.innerText = "Trascrizione in corso...";
+                        previewBox.innerText = "Inoltro dell'audio ufficiale all'IA...";
                         
-                        // Invia l'audio al server di Render
+                        // Invia l'audio e la lingua selezionata al server
                         const formData = new FormData();
                         formData.append('audio', audioBlob);
+                        formData.append('lang', langSelect.value);
 
                         try {
                             const response = await fetch('/upload_audio', {
@@ -123,7 +198,8 @@
                             });
                             const result = await response.json();
                             if (result.success) {
-                                statusText.innerText = "Trascritto nel Google Doc!";
+                                statusText.innerText = "Trascritto nel Google Doc! 🎉";
+                                previewBox.innerText = "Fatto! Testo inviato correttamente.";
                             } else {
                                 statusText.innerText = "Errore durante l'invio.";
                             }
@@ -131,13 +207,24 @@
                             statusText.innerText = "Errore di connessione.";
                         }
 
-                        // Ripristina la grafica dopo un po'
+                        // Ripristina la grafica dopo 4 secondi
                         setTimeout(() => {
                             statusText.innerText = "Tocca per registrare";
+                            previewBox.style.display = 'none';
+                            previewBox.innerText = '';
                         }, 4000);
                     };
 
                     mediaRecorder.start();
+                    
+                    // Avvia lo scorrimento del testo
+                    startSpeechRecognition();
+                    if (recognition) {
+                        previewBox.innerText = "Ascolto in corso...";
+                        previewBox.style.display = 'block';
+                        recognition.start();
+                    }
+
                     isRecording = true;
                     recordBtn.classList.add('recording');
                     statusText.innerText = "Registrazione in corso... (Tocca per fermare)";
@@ -150,6 +237,9 @@
                 // Ferma registrazione
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                if (recognition) {
+                    recognition.stop();
+                }
                 isRecording = false;
                 recordBtn.classList.remove('recording');
             }
@@ -157,4 +247,5 @@
     </script>
 
 </body>
+</html>
 </html>
