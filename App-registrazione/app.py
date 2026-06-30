@@ -44,15 +44,14 @@ def upload_audio():
         return jsonify({"success": False, "error": "Nessun file"}), 400
     
     audio_file = request.files['audio']
-    chosen_lang = request.form.get('lang', 'auto')
+    chosen_lang = request.form.get('lang', 'it')
     
-    # Crea un nome univoco per evitare sovrapposizioni tra i vari minuti
     timestamp = int(time.time())
-    audio_path = f"banca_dati_audio/chunk_{timestamp}.wav" 
+    # Usiamo un'estensione generica per non confondere l'IA sul formato di origine del telefono
+    audio_path = f"banca_dati_audio/chunk_{timestamp}.raw" 
     os.makedirs("banca_dati_audio", exist_ok=True)
     audio_file.save(audio_path)
 
-    # Configurazione IA ottimizzata per la velocità nei mini-blocchi
     if chosen_lang == 'auto':
         config = aai.TranscriptionConfig(language_detection=True)
     else:
@@ -63,16 +62,12 @@ def upload_audio():
     try:
         transcript = transcriber.transcribe(audio_path, config=config)
         
-        # Elimina il mini-file per non occupare spazio sul server
         if os.path.exists(audio_path):
             os.remove(audio_path)
             
-        if transcript.text:
-            # Formatta il blocco di testo con un andata a capo pulito
+        if transcript.text and transcript.text.strip():
             orario_blocco = time.strftime('%H:%M:%S', time.localtime(timestamp))
             testo_da_scrivere = f"\n[{orario_blocco}] {transcript.text}\n"
-            
-            # Scrive immediatamente sul Google Doc
             scrivi_su_google_doc(testo_da_scrivere)
         
         return jsonify({"success": True})
