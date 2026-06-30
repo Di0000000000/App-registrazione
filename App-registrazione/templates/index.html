@@ -29,11 +29,6 @@
         }
         .record-btn.recording { background-color: #00a2ff; color: #ffffff; animation: pulse 1.5s infinite; }
         #status { margin-top: 20px; font-size: 16px; color: #777777; font-weight: 500; }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(0, 162, 255, 0.4); }
-            70% { box-shadow: 0 0 0 20px rgba(0, 162, 255, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(0, 162, 255, 0); }
-        }
     </style>
 </head>
 <body>
@@ -62,39 +57,58 @@
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     
-                    // Lasciamo che il browser scelga il suo formato nativo migliore (più compatibile)
-                    mediaRecorder = new MediaRecorder(stream);
+                    // Trova il formato ottimale supportato dal dispositivo (iPhone usa mp4, Android usa webm)
+                    let options = { mimeType: 'audio/webm;codecs=opus' };
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                        options = { mimeType: 'audio/mp4' };
+                    }
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                        options = {}; // Lascia scegliere al browser se i precedenti falliscono
+                    }
+                    
+                    mediaRecorder = new MediaRecorder(stream, options);
                     
                     mediaRecorder.ondataavailable = async (event) => {
                         if (event.data && event.data.size > 0) {
                             const formData = new FormData();
-                            // Inviamo il blob direttamente senza forzare l'estensione .wav
-                            formData.append('audio', event.data);
+                            // Creiamo il file audio dinamico adattando l'estensione al tipo di telefono
+                            const extension = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+                            const audioBlob = new Blob([event.data], { type: mediaRecorder.mimeType });
+                            
+                            formData.append('audio', audioBlob, `chunk.${extension}`);
                             formData.append('lang', langSelect.value);
+
+                            statusText.innerText = "Invio blocco audio in corso...";
 
                             fetch('/upload_audio', { method: 'POST', body: formData })
                             .then(res => res.json())
-                            .then(data => { console.log("Frammento inviato"); })
-                            .catch(err => { console.error("Errore invio", err); });
+                            .then(data => { 
+                                if(data.success) {
+                                    statusText.innerText = "Registrazione attiva... Blocco salvato! 🟢";
+                                } else {
+                                    statusText.innerText = "Errore server nella trascrizione 🔴";
+                                }
+                            })
+                            .catch(err => { statusText.innerText = "Errore di rete nell'invio 🔴"; });
                         }
                     };
 
-                    // Sforna i dati ogni 30 secondi (ottimo compromesso velocità/leggerezza)
+                    // Sforna l'audio ogni 30 secondi esatti
                     mediaRecorder.start(30000);
                     
                     isRecording = true;
                     recordBtn.classList.add('recording');
-                    statusText.innerText = "Registrazione attiva... Scrittura sul Doc ogni 30 secondi.";
+                    statusText.innerText = "Registrazione attiva... Primo invio tra 30 secondi.";
                 } catch (err) {
-                    alert("Permesso microfono richiesto!");
+                    alert("Attiva il microfono dalle impostazioni del telefono!");
                 }
             } else {
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 isRecording = false;
                 recordBtn.classList.remove('recording');
-                statusText.innerText = "Sessione terminata. Elaborazione ultimi blocchi...";
-                setTimeout(() => { statusText.innerText = "Tocca per avviare la sessione di ore"; }, 4000);
+                statusText.innerText = "Sessione terminata.";
+                setTimeout(() => { statusText.innerText = "Tocca per avviare la sessione di ore"; }, 3000);
             }
         });
     </script>
