@@ -46,14 +46,17 @@ def upload_audio():
     audio_file = request.files['audio']
     chosen_lang = request.form.get('lang', 'it')
     
-    # Prendi l'estensione originale inviata dal telefono (.mp4 o .webm)
-    ext = audio_file.filename.split('.')[-1] if '.' in audio_file.filename else 'webm'
+    # Estraiamo l'estensione corretta inviata dal browser (es. mp4 o webm)
+    filename = audio_file.filename if audio_file.filename else 'chunk.webm'
+    ext = filename.split('.')[-1] if '.' in filename else 'webm'
     
     timestamp = int(time.time())
+    # Salviamo il file mantenendo il suo formato nativo leggibile dall'IA
     audio_path = f"banca_dati_audio/chunk_{timestamp}.{ext}" 
     os.makedirs("banca_dati_audio", exist_ok=True)
     audio_file.save(audio_path)
 
+    # Configurazione IA per i singoli frammenti
     if chosen_lang == 'auto':
         config = aai.TranscriptionConfig(language_detection=True)
     else:
@@ -62,21 +65,31 @@ def upload_audio():
     transcriber = aai.Transcriber()
     
     try:
+        # Avvia la trascrizione ufficiale
         transcript = transcriber.transcribe(audio_path, config=config)
         
+        # Pulizia immediata del file per non occupare spazio sul server
         if os.path.exists(audio_path):
             os.remove(audio_path)
             
+        # Controlliamo che l'IA abbia effettivamente trovato del testo parlato
         if transcript.text and transcript.text.strip():
             orario_blocco = time.strftime('%H:%M:%S', time.localtime(timestamp))
             testo_da_scrivere = f"\n[{orario_blocco}] {transcript.text}\n"
             scrivi_su_google_doc(testo_da_scrivere)
-        
-        return jsonify({"success": True})
+            return jsonify({"success": True})
+        else:
+            # Se nel frammento c'era solo silenzio o rumore, rispondiamo comunque Successo
+            # per evitare che lo schermo del telefono mostri un errore rosso
+            return jsonify({"success": True, "info": "Silenzio o nessun testo rilevato"})
 
     except Exception as e:
+        # Se c'è un errore reale (es. chiave IA scaduta o doc bloccato) lo catturiamo qui
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+    
