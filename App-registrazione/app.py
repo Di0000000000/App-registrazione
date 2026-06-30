@@ -41,14 +41,16 @@ def index():
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
     if 'audio' not in request.files:
-        return jsonify({"success": False, "error": "Nessun file"}), 400
+        return jsonify({"success": False, "error": "Nessun file inviato"}), 400
     
     audio_file = request.files['audio']
     chosen_lang = request.form.get('lang', 'it')
     
+    # Prendi l'estensione originale inviata dal telefono (.mp4 o .webm)
+    ext = audio_file.filename.split('.')[-1] if '.' in audio_file.filename else 'webm'
+    
     timestamp = int(time.time())
-    # Usiamo un'estensione generica per non confondere l'IA sul formato di origine del telefono
-    audio_path = f"banca_dati_audio/chunk_{timestamp}.raw" 
+    audio_path = f"banca_dati_audio/chunk_{timestamp}.{ext}" 
     os.makedirs("banca_dati_audio", exist_ok=True)
     audio_file.save(audio_path)
 
