@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registratore Vocale Continuo</title>
+    <title>Test Diagnostico Registratore</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,7 +28,7 @@
             transition: all 0.3s ease; box-shadow: 0 6px 20px rgba(0, 162, 255, 0.15);
         }
         .record-btn.recording { background-color: #00a2ff; color: #ffffff; animation: pulse 1.5s infinite; }
-        #status { margin-top: 20px; font-size: 16px; color: #777777; font-weight: 500; }
+        #status { margin-top: 20px; font-size: 16px; color: #333; font-weight: 500; background: #f0f0f0; padding: 10px; border-radius: 8px; width: 100%; }
     </style>
 </head>
 <body>
@@ -38,11 +38,10 @@
             <select id="langSelect">
                 <option value="it">Italiano 🇮🇹</option>
                 <option value="en">Inglese 🇬🇧</option>
-                <option value="auto">Rileva Automaticamente ✨</option>
             </select>
         </div>
         <button id="recordBtn" class="record-btn"><i class="fa-solid fa-microphone"></i></button>
-        <p id="status">Tocca per avviare la sessione di ore</p>
+        <p id="status">Stato: Pronto. Clicca il microfono.</p>
     </div>
 
     <script>
@@ -52,63 +51,67 @@
         let mediaRecorder;
         let isRecording = false;
 
+        // Controlla subito se il browser blocca il microfono per colpa di HTTP/HTTPS
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusText.innerHTML = "<span style='color:red;'>⚠️ ERRORE SICUREZZA: Il browser blocca il microfono. Assicurati che l'indirizzo del sito inizi con HTTPS:// e non con HTTP://</span>";
+        }
+
         recordBtn.addEventListener('click', async () => {
             if (!isRecording) {
+                statusText.innerText = "Stato: Richiesta accesso microfono...";
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    statusText.innerText = "Stato: Microfono attivo! Configurazione formato...";
                     
-                    // Trova il formato ottimale supportato dal dispositivo (iPhone usa mp4, Android usa webm)
                     let options = { mimeType: 'audio/webm;codecs=opus' };
-                    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                        options = { mimeType: 'audio/mp4' };
-                    }
-                    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                        options = {}; // Lascia scegliere al browser se i precedenti falliscono
-                    }
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'audio/mp4' }; }
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) { options = {}; }
                     
                     mediaRecorder = new MediaRecorder(stream, options);
-                    
+                    statusText.innerText = "Stato: Registratore pronto. Avvio flusso...";
+
                     mediaRecorder.ondataavailable = async (event) => {
+                        statusText.innerText = "Stato: Frammento audio catturato! Preparazione invio...";
                         if (event.data && event.data.size > 0) {
                             const formData = new FormData();
-                            // Creiamo il file audio dinamico adattando l'estensione al tipo di telefono
                             const extension = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
-                            const audioBlob = new Blob([event.data], { type: mediaRecorder.mimeType });
-                            
-                            formData.append('audio', audioBlob, `chunk.${extension}`);
+                            formData.append('audio', event.data, `chunk.${extension}`);
                             formData.append('lang', langSelect.value);
 
-                            statusText.innerText = "Invio blocco audio in corso...";
+                            statusText.innerText = "Stato: Invio audio a Render in corso...";
 
                             fetch('/upload_audio', { method: 'POST', body: formData })
                             .then(res => res.json())
                             .then(data => { 
                                 if(data.success) {
-                                    statusText.innerText = "Registrazione attiva... Blocco salvato! 🟢";
+                                    statusText.innerHTML = "Stato: <span style='color:green;'>Dati inviati con successo a Render! 🟢</span>";
                                 } else {
-                                    statusText.innerText = "Errore server nella trascrizione 🔴";
+                                    statusText.innerHTML = "Stato: <span style='color:red;'>Errore interno di Render (" + data.error + ") 🔴</span>";
                                 }
                             })
-                            .catch(err => { statusText.innerText = "Errore di rete nell'invio 🔴"; });
+                            .catch(err => { 
+                                statusText.innerHTML = "Stato: <span style='color:red;'>Errore di rete. Render non raggiungibile. 🔴</span>"; 
+                            });
+                        } else {
+                            statusText.innerText = "Stato: Frammento vuoto catturato (0 bytes).";
                         }
                     };
 
-                    // Sforna l'audio ogni 30 secondi esatti
-                    mediaRecorder.start(30000);
+                    // Sforna dati ogni 15 secondi (più veloce per il test)
+                    mediaRecorder.start(15000);
                     
                     isRecording = true;
                     recordBtn.classList.add('recording');
-                    statusText.innerText = "Registrazione attiva... Primo invio tra 30 secondi.";
+                    statusText.innerText = "Stato: In ascolto... Primo invio tra 15 secondi.";
                 } catch (err) {
-                    alert("Attiva il microfono dalle impostazioni del telefono!");
+                    statusText.innerHTML = "<span style='color:red;'>⚠️ Errore microfono: " + err.message + "</span>";
                 }
             } else {
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 isRecording = false;
                 recordBtn.classList.remove('recording');
-                statusText.innerText = "Sessione terminata.";
-                setTimeout(() => { statusText.innerText = "Tocca per avviare la sessione di ore"; }, 3000);
+                statusText.innerText = "Stato: Sessione fermata manualmente.";
             }
         });
     </script>
