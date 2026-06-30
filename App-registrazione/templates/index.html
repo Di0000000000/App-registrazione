@@ -41,9 +41,9 @@
         <div class="language-selector">
             <label for="langSelect">Lingua: </label>
             <select id="langSelect">
-                <option value="auto">Rileva Automaticamente ✨</option>
                 <option value="it">Italiano 🇮🇹</option>
                 <option value="en">Inglese 🇬🇧</option>
+                <option value="auto">Rileva Automaticamente ✨</option>
             </select>
         </div>
         <button id="recordBtn" class="record-btn"><i class="fa-solid fa-microphone"></i></button>
@@ -56,46 +56,44 @@
         const langSelect = document.getElementById('langSelect');
         let mediaRecorder;
         let isRecording = false;
-        let chunkInterval;
 
         recordBtn.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    // Registriamo in blocchi temporizzati
+                    
+                    // Lasciamo che il browser scelga il suo formato nativo migliore (più compatibile)
                     mediaRecorder = new MediaRecorder(stream);
                     
                     mediaRecorder.ondataavailable = async (event) => {
-                        if (event.data.size > 0) {
-                            const audioBlob = new Blob([event.data], { type: 'audio/wav' });
+                        if (event.data && event.data.size > 0) {
                             const formData = new FormData();
-                            formData.append('audio', audioBlob);
+                            // Inviamo il blob direttamente senza forzare l'estensione .wav
+                            formData.append('audio', event.data);
                             formData.append('lang', langSelect.value);
 
-                            // Spedisce il blocco di 1 minuto in background
                             fetch('/upload_audio', { method: 'POST', body: formData })
                             .then(res => res.json())
-                            .then(data => { console.log("Blocco inviato con successo"); })
-                            .catch(err => { console.error("Errore invio blocco", err); });
+                            .then(data => { console.log("Frammento inviato"); })
+                            .catch(err => { console.error("Errore invio", err); });
                         }
                     };
 
-                    // Avvia la registrazione e chiedi al browser di sfornare dati ogni 60000 millisecondi (1 minuto)
-                    mediaRecorder.start(60000);
+                    // Sforna i dati ogni 30 secondi (ottimo compromesso velocità/leggerezza)
+                    mediaRecorder.start(30000);
                     
                     isRecording = true;
                     recordBtn.classList.add('recording');
-                    statusText.innerText = "Registrazione continua attiva... Scrittura sul Doc ogni minuto.";
+                    statusText.innerText = "Registrazione attiva... Scrittura sul Doc ogni 30 secondi.";
                 } catch (err) {
                     alert("Permesso microfono richiesto!");
                 }
             } else {
-                // Ferma tutto
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 isRecording = false;
                 recordBtn.classList.remove('recording');
-                statusText.innerText = "Sessione terminata. Ultimi blocchi in scrittura...";
+                statusText.innerText = "Sessione terminata. Elaborazione ultimi blocchi...";
                 setTimeout(() => { statusText.innerText = "Tocca per avviare la sessione di ore"; }, 4000);
             }
         });
