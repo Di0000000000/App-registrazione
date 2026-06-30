@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, request, jsonify, render_template
 import assemblyai as aai
 from google.oauth2 import service_account
@@ -20,7 +21,6 @@ def scrivi_su_google_doc(testo_da_aggiungere):
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     service = build('docs', 'v1', credentials=creds)
     
-    # Recupera il documento per vedere quant'è lungo (serve l'indice di fine)
     doc = service.documents().get(documentId=GOOGLE_DOC_ID).execute()
     end_index = doc.get('body').get('content')[-1].get('endIndex') - 1
     
@@ -38,52 +38,44 @@ def scrivi_su_google_doc(testo_da_aggiungere):
 def index():
     return render_template('index.html')
 
-# Allineato l'indirizzo con index.html cambiando da /upload a /upload_audio
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
     if 'audio' not in request.files:
         return jsonify({"success": False, "error": "Nessun file"}), 400
     
     audio_file = request.files['audio']
-    chosen_lang = request.form.get('lang', 'auto') # Riceve la lingua scelta dallo schermo
+    chosen_lang = request.form.get('lang', 'auto')
     
-    # 1. SALVATAGGIO AUDIO
-    audio_path = "banca_dati_audio/registrazione_odierna.wav" 
+    # Crea un nome univoco per evitare sovrapposizioni tra i vari minuti
+    timestamp = int(time.time())
+    audio_path = f"banca_dati_audio/chunk_{timestamp}.wav" 
     os.makedirs("banca_dati_audio", exist_ok=True)
     audio_file.save(audio_path)
 
-    # 2. ELABORAZIONE TRASCRIZIONE, LINGUA E TONO
+    # Configurazione IA ottimizzata per la velocità nei mini-blocchi
     if chosen_lang == 'auto':
-        # Se selezioni automatico, l'IA rileva da sola se parli italiano o inglese
-        config = aai.TranscriptionConfig(speaker_labels=True, sentiment_analysis=True, language_detection=True)
+        config = aai.TranscriptionConfig(language_detection=True)
     else:
-        # Altrimenti usa la lingua fissa che hai impostato sul telefono
-        config = aai.TranscriptionConfig(speaker_labels=True, sentiment_analysis=True, language_code=chosen_lang)
+        config = aai.TranscriptionConfig(language_code=chosen_lang)
         
     transcriber = aai.Transcriber()
     
     try:
         transcript = transcriber.transcribe(audio_path, config=config)
         
-        info_lingua = f"Rilevata dall'IA" if chosen_lang == 'auto' else chosen_lang.upper()
-        testo_completo_doc = f"\n--- NUOVO DIALOGO REGISTRATO (Lingua: {info_lingua}) ---\n"
-        
-        for utterance in transcript.utterances:
-            sentiments = [word.sentiment for word in utterance.words if word.sentiment]
-            tono = max(set(sentiments), key=sentiments.count) if sentiments else "NEUTRAL"
-            tono_it = "Arrabbiato" if tono == "NEGATIVE" else "Calmo" if tono == "POSITIVE" else "Neutro"
+        # Elimina il mini-file per non occupare spazio sul server
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
             
-            # Sostituiamo i nomi dei parlanti con i numeri
-            parlante_num = utterance.speaker.replace("A", "1").replace("B", "2").replace("C", "3")
+        if transcript.text:
+            # Formatta il blocco di testo con un andata a capo pulito
+            orario_blocco = time.strftime('%H:%M:%S', time.localtime(timestamp))
+            testo_da_scrivere = f"\n[{orario_blocco}] {transcript.text}\n"
             
-            # Formattiamo la riga per il foglio di scrittura
-            riga = f"Persona {parlante_num} ({tono_it}): {utterance.text}\n"
-            testo_completo_doc += riga
-
-        # 3. SCRITTURA DIRETTA SUL FOGLIO MODIFICABILE
-        scrivi_su_google_doc(testo_completo_doc)
+            # Scrive immediatamente sul Google Doc
+            scrivi_su_google_doc(testo_da_scrivere)
         
-        return jsonify({"success": True, "status": "Trascrizione inviata al foglio e audio salvato."})
+        return jsonify({"success": True})
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
